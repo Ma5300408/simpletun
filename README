@@ -13,7 +13,7 @@ $ make simpletun
 -------
 
 Usage:
-simpletun -i <ifacename> [-s|-c <serverIP>] [-p <port>] [-u|-a] [-d]
+simpletun -i <ifacename> [-s|-c <serverIP>] [-p <port>] [-u|-a] [-d] [-P <Password:>]
 simpletun -h
 
 -i <ifacename>: Name of interface to use (mandatory)
@@ -22,9 +22,12 @@ simpletun -h
 -u|-a: use TUN (-u, default) or TAP (-a)
 -d: outputs debug information while running
 -h: prints this help text
-
+-P: input the login password with format <Password: ...> and the buffer size is 256
 -------
 
+I set a plaintext password when the server build up and when the client successfully connect with the server , it will send a password string to server to let the server check the password is correct or not . if it not correct,then the server will disconnect the client or keep the connection.
+
+-------
 Refer to http://backreference.org/2010/03/27/tuntap-interface-tutorial/ for 
 more information on tun/tap interfaces in Linux in general, and on this 
 program in particular.

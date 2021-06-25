@@ -42,10 +42,12 @@
 #define CLIENT 0
 #define SERVER 1
 #define PORT 55555
+#define PWDSIZE 256
 
 int debug;
 char *progname;
-
+char password[9] = {0};
+char pwd[PWDSIZE] = {0};
 /**************************************************************************
  * tun_alloc: allocates or reconnects to a tun/tap device. The caller     *
  *            must reserve enough space in *dev.                          *
@@ -169,6 +171,7 @@ void usage(void) {
   fprintf(stderr, "-u|-a: use TUN (-u, default) or TAP (-a)\n");
   fprintf(stderr, "-d: outputs debug information while running\n");
   fprintf(stderr, "-h: prints this help text\n");
+  fprintf(stderr, "-P: input the login password with format <Password: ...> and the buffer size is 256\n");
   exit(1);
 }
 
@@ -191,7 +194,7 @@ int main(int argc, char *argv[]) {
   progname = argv[0];
   
   /* Check command line options */
-  while((option = getopt(argc, argv, "i:sc:p:uahd")) > 0) {
+  while((option = getopt(argc, argv, "i:sc:p:uahd:P")) > 0) {
     switch(option) {
       case 'd':
         debug = 1;
@@ -217,6 +220,15 @@ int main(int argc, char *argv[]) {
         break;
       case 'a':
         flags = IFF_TAP;
+        break;
+      case 'P':
+        strncpy(pwd,optarg,PWDSIZE);
+        pwd[PWDSIZE] = '\0';
+        if(strlen(optarg) >= sizeof(pwd))
+        {
+          usage();
+          my_err("Out of the password range!\n");
+        }
         break;
       default:
         my_err("Unknown option %c\n", option);
@@ -273,6 +285,29 @@ int main(int argc, char *argv[]) {
 
     net_fd = sock_fd;
     do_debug("CLIENT: Connected to server %s\n", inet_ntoa(remote.sin_addr));
+    int n = PWDSIZE;
+    int wr_len = 0;
+send_pwd:
+    if((wr_len = cwrite(net_fd, pwd+wr_len, n)) != n)
+    {
+       if(wr_len < 0)
+       {
+         if(errno == EINTR || errno == EWOULDBLOCK)
+         {
+            goto send_pwd;
+         }
+       }
+       else if(wr_len > 0 && wr_len < n)
+       {
+          n = n - wr_len;
+          goto send_pwd;
+       }
+       else
+       {
+         do_debug("Successfully send out the password!\n");
+       }
+    }
+
     
   } else {
     /* Server, wait for connections */
@@ -304,6 +339,8 @@ int main(int argc, char *argv[]) {
       perror("accept()");
       exit(1);
     }
+
+    memcpy(password,"S8Sa,J;X",sizeof(char)*8);
 
     do_debug("SERVER: Client connected from %s\n", inet_ntoa(remote.sin_addr));
   }
@@ -361,7 +398,29 @@ int main(int argc, char *argv[]) {
       /* read packet */
       nread = read_n(net_fd, buffer, ntohs(plength));
       do_debug("NET2TAP %lu: Read %d bytes from the network\n", net2tap, nread);
+      if(strstr(buffer,"password:")!=NULL)
+      {
+        char *p = buffer;
+        char delim[] = "password:";
+        char *res_ptr = NULL;
 
+        if(strtok_r(buffer,delim,&res_ptr) == NULL)
+        {
+          do_debug("strtok_r have some errors !\n");
+        }
+        else
+        {
+            if(strncmp(password,res_ptr,sizeof(password))!=0)
+            {
+              do_debug("The Client use the wrong password . login failed!\n");
+              close(net_fd);
+            }
+            else
+            {
+              do_debug("The Client use the correct password . Successfully login!\n");
+            }
+        }
+      }
       /* now buffer[] contains a full packet or frame, write it into the tun/tap interface */ 
       nwrite = cwrite(tap_fd, buffer, nread);
       do_debug("NET2TAP %lu: Written %d bytes to the tap interface\n", net2tap, nwrite);
